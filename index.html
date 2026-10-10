@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="en" dir="ltr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{title}}</title>
+  <meta name="description" content="{{description}}">
+  <meta name="theme-color" content="#f6f4ef">
+
+  <!-- Link preview (WhatsApp, LinkedIn, Facebook...) -->
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="{{title}}">
+  <meta property="og:description" content="{{description}}">
+  <meta property="og:url" content="{{site_url}}">
+  <meta property="og:image" content="{{share_image}}">
+  <meta name="twitter:card" content="summary_large_image">
+
+  <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@300;400;500;600&family=Instrument+Serif:ital@0;1&family=Manrope:wght@400;500;600;700&display=swap">
+  <link rel="stylesheet" href="assets/css/style.css?v={{version}}">
+</head>
+<body>
+  <a class="skip-link" href="#work" data-i18n="skip">Skip to projects</a>
+
+  <header class="site-header" id="site-header">
+    <div class="wrap header-inner">
+      <a class="brand" href="#top" dir="ltr"><span class="brand-main">AZIZ</span><span class="brand-sub">DESIGN</span></a>
+      <nav class="site-nav" aria-label="Main">
+        <a href="#work" data-i18n="nav.work">Work</a>
+        <a href="#about" data-i18n="nav.about">About</a>
+        <a href="#contact" data-i18n="nav.contact">Contact</a>
+      </nav>
+      <button class="lang-toggle" id="lang-toggle" type="button"></button>
+    </div>
+  </header>
+
+  <main id="top">
+    <section class="hero wrap">
+      <p class="eyebrow" id="hero-eyebrow"></p>
+      <h1 class="hero-title" id="hero-title"></h1>
+      <p class="hero-intro" id="hero-intro"></p>
+      <dl class="hero-stats" id="hero-stats"></dl>
+    </section>
+
+    <section class="work wrap" id="work" aria-labelledby="work-title">
+      <div class="section-head">
+        <h2 class="section-title" id="work-title" data-i18n="work.title">Selected work</h2>
+        <p class="section-note" data-i18n="work.note"></p>
+      </div>
+      <div class="cards" id="cards"></div>
+    </section>
+
+    <div id="projects"></div>
+
+    <section class="about wrap" id="about" aria-labelledby="about-title">
+      <div class="split">
+        <h2 class="section-title" id="about-title" data-i18n="about.title">About</h2>
+        <div>
+          <p class="about-text" id="about-text"></p>
+          <div id="services"></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="contact wrap" id="contact" aria-labelledby="contact-title">
+      <div class="split">
+        <div>
+          <h2 class="contact-title" id="contact-title" data-i18n="contact.title">Let’s work together</h2>
+          <p class="contact-lead" data-i18n="contact.lead"></p>
+        </div>
+        <ul class="contact-list" id="contact-list"></ul>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="wrap footer-inner">
+      <span id="footer-copy"></span>
+      <a href="#top" data-i18n="footer.top">Back to top</a>
+    </div>
+  </footer>
+
+  <dialog class="lightbox" id="lightbox">
+    <div class="lb-bar">
+      <p class="lb-caption" id="lb-caption"></p>
+      <span class="lb-count" id="lb-count" dir="ltr"></span>
+      <button class="lb-btn" id="lb-close" type="button">
+        <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="1.6" fill="none" stroke-linecap="round"/></svg>
+      </button>
+    </div>
+    <div class="lb-stage" id="lb-stage">
+      <img class="lb-img" id="lb-img" alt="">
+      <button class="lb-btn lb-nav lb-prev" id="lb-prev" type="button">
+        <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M15 5l-7 7 7 7" stroke="currentColor" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </button>
+      <button class="lb-btn lb-nav lb-next" id="lb-next" type="button">
+        <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M9 5l7 7-7 7" stroke="currentColor" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </button>
+    </div>
+  </dialog>
+
+  <noscript><p class="notice wrap">This portfolio needs JavaScript to show the projects.</p></noscript>
+
+  <script src="data.js?v={{version}}"></script>
+  <script src="assets/js/main.js?v={{version}}"></script>
+</body>
+</html>
