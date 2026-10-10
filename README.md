@@ -1,7 +1,8 @@
 # AZIZ DESIGN — Portfolio
 
 Portfolio website for AZIZ DESIGN. Every folder inside `projects/` becomes its own
-section on the site, with a gallery of its images. The site is available in
+section on the site. Each project shows 3 of its images; the third one shows "+N"
+and opens the rest. Any image opens full screen. The site is available in
 English and Arabic.
 
 ## Add or change a project
@@ -33,7 +34,24 @@ The number is not shown on the site. Images are sorted by file name in the same 
 }
 ```
 
-`cover` is the image shown first and on the project card. Without it, the first image is used.
+`cover` is the image shown large in the project's 3-image preview. Without it, the first image is used.
+
+## Many projects (20–50 or more)
+
+The site is built for this:
+
+- The page shows 8 projects, then a **Show more projects** button.
+- Each project's `category` becomes a filter button at the top of the work section
+  (shown once there are at least 2 different categories). Use exactly the same
+  category name in every project that belongs to it.
+- A **search** box appears once there are 7 or more projects. It searches titles,
+  categories, locations and years in both languages.
+- Images are published as small WebP copies (about 150 KB each), so even 50 projects
+  stay far below GitHub Pages' 1 GB limit.
+
+To keep the GitHub repository light, export images at about **2500–3000 px** wide
+before adding them (a 2 MB JPG is plenty). The build warns about files over 25 MB,
+and GitHub refuses files over 100 MB.
 
 ## Edit the site text and contact details
 

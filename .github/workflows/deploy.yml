@@ -31,6 +31,14 @@ jobs:
       - name: Install Pillow (image resizing)
         run: pip install pillow
 
+      # Reuse the images resized by earlier runs, so only new or changed images are processed.
+      - name: Restore resized images
+        uses: actions/cache@v4
+        with:
+          path: _site/projects
+          key: resized-images-${{ github.run_id }}
+          restore-keys: resized-images-
+
       - id: pages
         uses: actions/configure-pages@v5
 

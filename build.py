@@ -17,13 +17,14 @@ import os
 import re
 import shutil
 import sys
+from concurrent.futures import ProcessPoolExecutor
 from functools import partial
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import quote
 
 try:
-    from PIL import Image, ImageOps
+    from PIL import Image, ImageOps, features
 
     Image.MAX_IMAGE_PIXELS = None  # large renders are expected, and they are our own files
 except ImportError:  # the site still builds, just without resizing
@@ -36,9 +37,16 @@ OUT = ROOT / "_site"
 RESIZABLE = {".jpg", ".jpeg", ".png", ".webp", ".tif", ".tiff", ".bmp"}
 COPY_AS_IS = {".gif", ".svg", ".avif"}  # animations / vectors are published untouched
 
-FULL_PX = 2400  # longest edge of the image shown in the full-screen viewer
-THUMB_PX = 960  # width of the gallery thumbnails
-SETTINGS = f"{FULL_PX}-{THUMB_PX}-v1"  # changing this regenerates every image
+FULL_PX = 2200  # longest edge of the image shown in the full-screen viewer
+THUMB_PX = 900  # width of the gallery thumbnails
+# WebP files are about a third smaller than JPEG, which keeps 50 projects well under
+# GitHub Pages' 1 GB limit. Older Pillow builds without WebP fall back to JPEG.
+WEBP = Image is not None and features.check("webp")
+EXT = ".webp" if WEBP else ".jpg"
+SETTINGS = f"{FULL_PX}-{THUMB_PX}-{EXT}-v2"  # changing this regenerates every image
+
+BIG_FILE = 25 * 1024 * 1024  # source images above this make the GitHub repository heavy
+GITHUB_LIMIT = 100 * 1024 * 1024  # GitHub refuses files above this
 
 
 def natural_key(name):
@@ -99,7 +107,7 @@ def file_digest(path):
 
 
 def to_rgb(im):
-    """JPEG has no transparency: put transparent images on a white background."""
+    """Web images need plain RGB: put transparent images on a white background."""
     if im.mode == "RGB":
         return im
     im = im.convert("RGBA")
@@ -108,44 +116,55 @@ def to_rgb(im):
     return flat
 
 
-def web_image(src, dest_dir, written):
+def save(im, path, quality, icc):
+    if WEBP:
+        im.save(path, "WEBP", quality=quality, method=4, icc_profile=icc)
+    else:
+        im.save(path, "JPEG", quality=quality, optimize=True, progressive=True, icc_profile=icc)
+
+
+def process_image(src, dest_dir):
     """Write the full-size and thumbnail versions of one image and describe them.
 
-    File names include a hash of the image content, so unchanged images are
-    not processed again and visitors' browsers never show an outdated copy.
+    Runs in a separate process (several images at once). File names include a
+    hash of the image content, so unchanged images are not processed again and
+    visitors' browsers never show an outdated copy.
+    Returns (image info, files written, error message).
     """
-    stem = re.sub(r"[^\w-]+", "-", src.stem).strip("-").lower() or "image"
-    digest = file_digest(src)
-    ext = src.suffix.lower()
+    try:
+        stem = re.sub(r"[^\w-]+", "-", src.stem).strip("-").lower() or "image"
+        digest = file_digest(src)
+        ext = src.suffix.lower()
 
-    if Image is None or ext in COPY_AS_IS:
-        out = dest_dir / f"{stem}.{digest}{ext}"
-        if not out.exists():
-            shutil.copy2(src, out)
-        written.add(out)
-        return {"src": url_for(out), "thumb": url_for(out)}
+        if Image is None or ext in COPY_AS_IS:
+            out = dest_dir / f"{stem}.{digest}{ext}"
+            if not out.exists():
+                shutil.copy2(src, out)
+            return {"src": url_for(out), "thumb": url_for(out)}, [out], None
 
-    full = dest_dir / f"{stem}.{digest}.jpg"
-    thumb = dest_dir / f"{stem}.{digest}.thumb.jpg"
-    written.update((full, thumb))
-    if full.exists() and thumb.exists():
-        with Image.open(full) as im:
-            width, height = im.size
-        with Image.open(thumb) as im:
-            thumb_width = im.width
-    else:
-        with Image.open(src) as original:
-            # keep the colour profile so renders look the same as on the designer's screen
-            icc = original.info.get("icc_profile") if original.mode in ("RGB", "RGBA") else None
-            im = to_rgb(ImageOps.exif_transpose(original))
-        big = im.copy()
-        big.thumbnail((FULL_PX, FULL_PX), Image.LANCZOS)
-        big.save(full, "JPEG", quality=85, optimize=True, progressive=True, icc_profile=icc)
-        small = im.copy()
-        small.thumbnail((THUMB_PX, THUMB_PX * 4), Image.LANCZOS)
-        small.save(thumb, "JPEG", quality=80, optimize=True, progressive=True, icc_profile=icc)
-        width, height, thumb_width = big.width, big.height, small.width
-    return {"src": url_for(full), "thumb": url_for(thumb), "w": width, "h": height, "tw": thumb_width}
+        full = dest_dir / f"{stem}.{digest}{EXT}"
+        thumb = dest_dir / f"{stem}.{digest}.thumb{EXT}"
+        if full.exists() and thumb.exists():
+            with Image.open(full) as im:
+                width, height = im.size
+            with Image.open(thumb) as im:
+                thumb_width = im.width
+        else:
+            with Image.open(src) as original:
+                # keep the colour profile so renders look the same as on the designer's screen
+                icc = original.info.get("icc_profile") if original.mode in ("RGB", "RGBA") else None
+                im = to_rgb(ImageOps.exif_transpose(original))
+            big = im.copy()
+            big.thumbnail((FULL_PX, FULL_PX), Image.LANCZOS)
+            save(big, full, 82, icc)
+            small = im.copy()
+            small.thumbnail((THUMB_PX, THUMB_PX * 4), Image.LANCZOS)
+            save(small, thumb, 78, icc)
+            width, height, thumb_width = big.width, big.height, small.width
+        info = {"src": url_for(full), "thumb": url_for(thumb), "w": width, "h": height, "tw": thumb_width}
+        return info, [full, thumb], None
+    except Exception as err:  # one broken file should not stop the whole site
+        return None, [], str(err)
 
 
 def load_site():
@@ -159,8 +178,8 @@ def load_site():
     return site
 
 
-def load_projects(written):
-    """Turn every folder in projects/ into a project with its images."""
+def find_projects(warnings):
+    """Every folder in projects/ with its info.json and its image files, in order."""
     PROJECTS.mkdir(exist_ok=True)
     folders = sorted(
         (d for d in PROJECTS.iterdir() if d.is_dir() and not d.name.startswith((".", "_"))),
@@ -188,34 +207,56 @@ def load_projects(written):
                 files.remove(match)
                 files.insert(0, match)
             else:
-                print(f"  ! {folder.name}/info.json: cover image \"{cover}\" not found, using the first image")
+                warnings.append(f"{folder.name}/info.json: cover image \"{cover}\" not found, using the first image")
 
-        slug = unique_slug(folder.name, used)
-        dest = OUT / "projects" / slug
-        dest.mkdir(parents=True, exist_ok=True)
-        images = []
         for f in files:
-            try:
-                images.append(web_image(f, dest, written))
-            except Exception as err:  # one broken file should not stop the whole site
-                print(f"  ! could not read {folder.name}/{f.name}: {err}")
+            size = f.stat().st_size
+            if size > GITHUB_LIMIT:
+                warnings.append(f"{folder.name}/{f.name} is {size >> 20} MB: GitHub refuses files over 100 MB, export it smaller")
+            elif size > BIG_FILE:
+                warnings.append(f"{folder.name}/{f.name} is {size >> 20} MB: exporting it at ~3000 px keeps the repository light")
+
+        projects.append({"folder": folder, "info": info, "files": files, "slug": unique_slug(folder.name, used)})
+    return projects
+
+
+def process_all(found, warnings):
+    """Resize all images (several at once) and return the projects for data.js."""
+    jobs = []
+    for project in found:
+        dest = OUT / "projects" / project["slug"]
+        dest.mkdir(parents=True, exist_ok=True)
+        jobs += [(project, f, dest) for f in project["files"]]
+
+    with ProcessPoolExecutor() as pool:
+        results = list(pool.map(process_image, [j[1] for j in jobs], [j[2] for j in jobs], chunksize=4))
+
+    written, images_of = set(), {id(p): [] for p in found}
+    for (project, src, _), (info, outputs, error) in zip(jobs, results):
+        written.update(outputs)
+        if error:
+            warnings.append(f"could not read {project['folder'].name}/{src.name}: {error}")
+        else:
+            images_of[id(project)].append(info)
+
+    projects = []
+    for project in found:
+        images, info, folder = images_of[id(project)], project["info"], project["folder"]
+        print(f"  - {folder.name}/ -> {len(images)} images")
         if not images:
             continue
-
         projects.append(
             {
-                "id": slug,
+                "id": project["slug"],
                 "title": localized(info.get("title")) or localized(title_from_folder(folder.name)),
                 "category": localized(info.get("category")),
                 "location": localized(info.get("location")),
                 "year": str(info.get("year") or "").strip() or None,
                 "description": localized(info.get("description")),
                 "images": images,
-                "_cover": files[0],
             }
         )
-        print(f"  - {folder.name}/ -> {len(images)} images")
-    return projects
+    return projects, written
 
 
 def remove_stale(written):
@@ -227,13 +268,14 @@ def remove_stale(written):
             path.rmdir()
 
 
-def make_share_image(projects):
+def make_share_image(found):
     """og.jpg: the preview picture shown when the link is shared on WhatsApp, LinkedIn..."""
     target = OUT / "og.jpg"
-    if Image is None or not projects or projects[0]["_cover"].suffix.lower() not in RESIZABLE:
+    cover = found[0]["files"][0] if found else None
+    if Image is None or cover is None or cover.suffix.lower() not in RESIZABLE:
         target.unlink(missing_ok=True)
         return False
-    with Image.open(projects[0]["_cover"]) as original:
+    with Image.open(cover) as original:
         im = to_rgb(ImageOps.exif_transpose(original))
     ImageOps.fit(im, (1200, 630), Image.LANCZOS).save(target, "JPEG", quality=85, optimize=True)
     return True
@@ -289,14 +331,13 @@ def main():
     shutil.copytree(ROOT / "assets", OUT / "assets")
 
     print("Projects:")
-    written = set()
-    projects = load_projects(written)
+    warnings = []
+    found = find_projects(warnings)
+    projects, written = process_all(found, warnings)
     remove_stale(written)
-    has_share_image = make_share_image(projects)
-    for project in projects:
-        del project["_cover"]
+    has_share_image = make_share_image(found)
 
-    data = json.dumps({"site": site, "projects": projects}, ensure_ascii=False, indent=1)
+    data = json.dumps({"site": site, "projects": projects}, ensure_ascii=False, separators=(",", ":"))
     (OUT / "data.js").write_text(f"window.AZIZ_DATA = {data};\n", encoding="utf-8")
 
     version = hashlib.sha1(data.encode())
@@ -306,7 +347,10 @@ def main():
     write_index(site, has_share_image, version.hexdigest()[:8])
 
     total = sum(len(p["images"]) for p in projects)
-    print(f"\nDone: {len(projects)} projects, {total} images -> {OUT.name}/")
+    size = sum(f.stat().st_size for f in OUT.rglob("*") if f.is_file())
+    print(f"\nDone: {len(projects)} projects, {total} images -> {OUT.name}/ ({size / 1024 / 1024:.0f} MB)")
+    for warning in warnings:
+        print(f"  ! {warning}")
     samples = [key for key, value in site["contact"].items() if "example" in value or "000 0000" in value]
     if samples:
         print(f"Reminder: site.json still has sample contact details ({', '.join(samples)}).")

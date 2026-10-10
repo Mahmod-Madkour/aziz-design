@@ -3,7 +3,9 @@
   "use strict";
 
   const DATA = window.AZIZ_DATA;
-  const PREVIEW_COUNT = 9; // images shown per project before "Show all"
+  const PAGE_SIZE = 8; // projects shown before "Show more projects"
+  const PREVIEW = 3; // images shown per project; the last one turns into the "+N" tile
+  const SEARCH_FROM = 7; // the search box appears once there are this many projects
 
   const UI = {
     en: {
@@ -18,16 +20,18 @@
       "stats.images": "Images",
       "stats.location": "Based in",
       "work.title": "Selected work",
-      "work.note": "Choose a project to jump to it, or tap any image to view it full screen.",
-      "project.category": "Category",
-      "project.location": "Location",
-      "project.year": "Year",
-      "project.images": "Images",
+      "work.note": "Tap any image to view it full screen.",
+      "filter.label": "Filter projects by category",
+      "filter.all": "All",
+      "search.placeholder": "Search projects",
+      "more.button": "Show more projects",
+      "more.status": "Showing {shown} of {total} projects",
+      noResults: "No projects match your search.",
+      clear: "Clear filters",
       imagesCount: "{n} images",
-      showAll: "Show all {n} images",
+      "plus.view": "View all",
+      "plus.label": "Show all {n} images of {project}",
       showLess: "Show fewer images",
-      nextProject: "Next project",
-      firstProject: "Back to first project",
       imageAlt: "{project} — image {n} of {total}",
       "about.title": "About",
       "about.services": "Services",
@@ -60,16 +64,18 @@
       "stats.images": "صور",
       "stats.location": "المقر",
       "work.title": "أعمال مختارة",
-      "work.note": "اختر مشروعاً للانتقال إليه، أو اضغط على أي صورة لعرضها بملء الشاشة.",
-      "project.category": "التصنيف",
-      "project.location": "الموقع",
-      "project.year": "السنة",
-      "project.images": "الصور",
+      "work.note": "اضغط على أي صورة لعرضها بملء الشاشة.",
+      "filter.label": "تصفية المشاريع حسب التصنيف",
+      "filter.all": "الكل",
+      "search.placeholder": "ابحث في المشاريع",
+      "more.button": "عرض المزيد من المشاريع",
+      "more.status": "يتم عرض {shown} من {total}",
+      noResults: "لا توجد مشاريع مطابقة لبحثك.",
+      clear: "مسح التصفية",
       imagesCount: "عدد الصور: {n}",
-      showAll: "عرض كل الصور ({n})",
+      "plus.view": "عرض الكل",
+      "plus.label": "عرض كل صور {project} ({n})",
       showLess: "عرض صور أقل",
-      nextProject: "المشروع التالي",
-      firstProject: "العودة إلى أول مشروع",
       imageAlt: "{project} — الصورة {n} من {total}",
       "about.title": "نبذة",
       "about.services": "الخدمات",
@@ -92,7 +98,14 @@
     },
   };
 
-  const state = { lang: initialLang(), expanded: new Set(), rendered: false };
+  const state = {
+    lang: initialLang(),
+    category: "all", // English name of the selected category, or "all"
+    query: "",
+    visible: PAGE_SIZE,
+    expanded: new Set(), // projects whose "+N" tile was opened
+    rendered: false,
+  };
   const $ = (selector) => document.querySelector(selector);
 
   /* ---------- helpers ---------- */
@@ -122,6 +135,18 @@
 
   const pad = (n) => String(n).padStart(2, "0");
   const isRTL = () => state.lang === "ar";
+  const anchor = (project) => `project-${project.id}`;
+  const ratio = (image) => (image.w && image.h ? image.w / image.h : 1.5);
+
+  // Lower-case, and ignore Arabic diacritics / hamza forms so "اسكندرية" finds "الإسكندرية".
+  function normalize(text) {
+    return String(text)
+      .toLowerCase()
+      .normalize("NFKD")
+      .replace(/[̀-ًͯ-ٰٟ]/g, "")
+      .replace(/ة/g, "ه")
+      .replace(/ى/g, "ي");
+  }
 
   function h(tag, attrs, ...children) {
     const node = document.createElement(tag);
@@ -154,10 +179,7 @@
     return h("img", attrs);
   }
 
-  const ratio = (image) => (image.w && image.h ? image.w / image.h : 1.5);
-  const anchor = (project) => `project-${project.id}`;
-
-  /* ---------- rendering ---------- */
+  /* ---------- page ---------- */
 
   function render() {
     const root = document.documentElement;
@@ -173,27 +195,26 @@
     toggle.setAttribute("aria-label", t("switchLabel"));
 
     if (!DATA) {
-      $("#projects").replaceChildren(h("p", { class: "notice wrap", text: t("missing") }));
+      $("#projects").replaceChildren(h("p", { class: "notice", text: t("missing") }));
       return;
     }
 
-    const { site, projects } = DATA;
+    const { site } = DATA;
     const role = loc(site.role);
     document.title = role ? `${site.name} — ${role}` : site.name;
 
-    renderHero(site, projects);
-    renderCards(projects);
-    $("#projects").replaceChildren(...projects.map(renderProject));
+    renderHero(site);
+    renderTools();
+    renderProjects(!state.rendered);
     renderAbout(site);
     renderContact(site);
     $("#footer-copy").textContent = `© ${new Date().getFullYear()} ${site.name}. ${t("footer.rights")}`;
-
     setupLightboxLabels();
-    revealOnScroll();
     state.rendered = true;
   }
 
-  function renderHero(site, projects) {
+  function renderHero(site) {
+    const { projects } = DATA;
     const role = loc(site.role);
     $("#hero-eyebrow").textContent = role ? `${role} — ${t("portfolio")}` : t("portfolio");
     $("#hero-title").replaceChildren(...withEmphasis(loc(site.headline) || site.name));
@@ -208,133 +229,228 @@
     $("#hero-stats").replaceChildren(
       ...stats.map(([key, value]) => h("div", null, h("dt", { text: t(key) }), h("dd", { text: value })))
     );
+    $("#work-note").textContent = t("work.note");
   }
 
-  function renderCards(projects) {
-    const cards = $("#cards");
-    if (!projects.length) {
-      cards.replaceChildren(h("p", { class: "notice", text: t("empty") }));
-      return;
+  /* ---------- filters, search, paging ---------- */
+
+  function categories() {
+    const found = new Map();
+    for (const project of DATA.projects) {
+      if (!project.category) continue;
+      const entry = found.get(project.category.en) || { label: project.category, count: 0 };
+      entry.count += 1;
+      found.set(project.category.en, entry);
     }
-    cards.replaceChildren(
-      ...projects.map((project, i) => {
-        const meta = [loc(project.category), project.year].filter(Boolean).join(" · ");
-        return h(
-          "a",
-          { class: "card reveal", href: `#${anchor(project)}` },
-          h("div", { class: "card-media" }, picture(project.images[0], "", "(min-width: 900px) 33vw, 100vw")),
-          h(
-            "div",
-            { class: "card-body" },
-            h("span", { class: "num", text: pad(i + 1) }),
-            h("h3", { class: "card-title", text: loc(project.title) }),
-            h("p", { class: "card-meta", text: meta || t("imagesCount", { n: project.images.length }) })
-          )
-        );
-      })
+    return found;
+  }
+
+  function renderTools() {
+    const cats = categories();
+    const showFilters = cats.size > 1;
+    const showSearch = DATA.projects.length >= SEARCH_FROM;
+    if (!showFilters) state.category = "all";
+
+    $("#work-tools").hidden = !showFilters && !showSearch;
+    $("#search-box").hidden = !showSearch;
+    const search = $("#search");
+    search.placeholder = t("search.placeholder");
+    search.setAttribute("aria-label", t("search.placeholder"));
+
+    const filters = $("#filters");
+    filters.hidden = !showFilters;
+    filters.setAttribute("aria-label", t("filter.label"));
+    if (!showFilters) return;
+    const chip = (key, label, count) =>
+      h(
+        "button",
+        { type: "button", class: "chip", "data-key": key, "aria-pressed": String(state.category === key), onclick: () => selectCategory(key) },
+        label,
+        h("span", { class: "chip-count", text: count })
+      );
+    filters.replaceChildren(
+      chip("all", t("filter.all"), DATA.projects.length),
+      ...[...cats].map(([key, entry]) => chip(key, loc(entry.label), entry.count))
     );
   }
 
-  function renderProject(project, index) {
-    const { projects } = DATA;
-    const total = project.images.length;
-    const expanded = state.expanded.has(project.id);
-    const shown = expanded ? project.images : project.images.slice(0, PREVIEW_COUNT);
+  function selectCategory(key) {
+    state.category = key;
+    state.visible = PAGE_SIZE;
+    $("#filters").querySelectorAll(".chip").forEach((chip) => {
+      chip.setAttribute("aria-pressed", String(chip.dataset.key === key));
+    });
+    renderProjects(true);
+  }
+
+  function clearFilters() {
+    state.category = "all";
+    state.query = "";
+    state.visible = PAGE_SIZE;
+    $("#search").value = "";
+    renderTools();
+    renderProjects(true);
+  }
+
+  function filtered() {
+    const words = normalize(state.query).split(/\s+/).filter(Boolean);
+    return DATA.projects.filter((project) => {
+      if (state.category !== "all" && (!project.category || project.category.en !== state.category)) return false;
+      if (!words.length) return true;
+      const text = normalize(
+        [project.title, project.category, project.location]
+          .flatMap((value) => (value ? [value.en, value.ar] : []))
+          .concat(project.year || "")
+          .join(" ")
+      );
+      return words.every((word) => text.includes(word));
+    });
+  }
+
+  function renderProjects(animate) {
+    const box = $("#projects");
+    const list = filtered();
+    const shown = list.slice(0, state.visible);
+
+    if (!DATA.projects.length) {
+      box.replaceChildren(h("p", { class: "notice", text: t("empty") }));
+    } else if (!list.length) {
+      box.replaceChildren(
+        h("div", { class: "notice" }, h("p", { text: t("noResults") }), h("button", { type: "button", class: "pill", text: t("clear"), onclick: clearFilters }))
+      );
+    } else {
+      box.replaceChildren(...shown.map(renderProject));
+    }
+    updateMore(list.length, shown.length);
+    revealOnScroll(animate);
+  }
+
+  function updateMore(total, shown) {
+    $("#more").hidden = shown >= total;
+    $("#more-status").textContent = t("more.status", { shown, total });
+    $("#more-button").textContent = t("more.button");
+  }
+
+  $("#more-button").addEventListener("click", () => {
+    const list = filtered();
+    const start = state.visible;
+    state.visible += PAGE_SIZE;
+    const added = list.slice(start, state.visible).map(renderProject);
+    $("#projects").append(...added);
+    updateMore(list.length, Math.min(state.visible, list.length));
+    revealOnScroll(true);
+    if (added.length) added[0].querySelector(".project-title").focus({ preventScroll: true });
+  });
+
+  $("#search").addEventListener("input", (event) => {
+    state.query = event.target.value;
+    state.visible = PAGE_SIZE;
+    renderProjects(false);
+  });
+
+  /* ---------- one project ---------- */
+
+  function renderProject(project) {
+    const number = DATA.projects.indexOf(project) + 1;
     const title = loc(project.title);
+    const images = project.images;
+    const total = images.length;
+    const expanded = state.expanded.has(project.id);
+    const preview = images.slice(0, PREVIEW);
+    const remaining = total - preview.length;
+    const alt = (i) => t("imageAlt", { project: title, n: i + 1, total });
 
-    const meta = [
-      ["project.category", loc(project.category)],
-      ["project.location", loc(project.location)],
-      ["project.year", project.year],
-      ["project.images", pad(total)],
-    ].filter(([, value]) => value);
-
-    const isLast = index === projects.length - 1;
-    const next = projects[(index + 1) % projects.length];
-
-    const gallery = h(
-      "div",
-      { class: "gallery" },
-      shown.map((image, i) => {
-        const feature = i === 0;
-        // The first image spans the full width; very tall images are cropped there to stay on screen.
-        const r = feature ? Math.max(ratio(image), 1.25) : ratio(image);
+    const tiles = preview.map((image, i) => {
+      const isPlus = i === preview.length - 1 && remaining > 0 && !expanded;
+      const sizes = i === 0 && preview.length > 1 ? "(min-width: 900px) 45vw, 66vw" : "(min-width: 900px) 25vw, 50vw";
+      if (isPlus) {
         return h(
           "button",
           {
             type: "button",
-            class: `gallery-item reveal${feature ? " is-feature" : ""}`,
-            style: `--r:${r.toFixed(4)}`,
-            onclick: () => openLightbox(project, i),
+            class: "tile is-plus",
+            "aria-expanded": "false",
+            "aria-label": t("plus.label", { project: title, n: total }),
+            onclick: () => toggleExpanded(project),
           },
-          picture(
-            image,
-            t("imageAlt", { project: title, n: i + 1, total }),
-            feature ? "(min-width: 900px) 70vw, 100vw" : "(min-width: 900px) 25vw, 50vw"
-          )
+          picture(image, "", sizes),
+          h("span", { class: "plus", "aria-hidden": "true" }, h("strong", { dir: "ltr", text: `+${remaining}` }), h("span", { text: t("plus.view") }))
         );
-      })
-    );
+      }
+      return h("button", { type: "button", class: "tile", onclick: () => openLightbox(project, i) }, picture(image, alt(i), sizes));
+    });
 
-    return h(
-      "section",
-      { class: "project wrap", id: anchor(project), "aria-labelledby": `${anchor(project)}-title` },
+    const rest =
+      expanded &&
+      remaining > 0 &&
       h(
         "div",
-        { class: "project-grid" },
-        h(
-          "header",
-          { class: "project-info" },
-          h(
-            "div",
-            { class: "project-sticky" },
-            h("span", { class: "num", text: pad(index + 1) }),
-            h("h2", { class: "project-title", id: `${anchor(project)}-title`, text: title }),
-            meta.length > 0 &&
-              h(
-                "dl",
-                { class: "project-meta" },
-                meta.map(([key, value]) => h("div", null, h("dt", { text: t(key) }), h("dd", { text: value })))
-              ),
-            loc(project.description) && h("p", { class: "project-desc", text: loc(project.description) }),
-            projects.length > 1 &&
-              h(
-                "a",
-                { class: "next-link", href: `#${anchor(next)}` },
-                isLast ? t("firstProject") : `${t("nextProject")}: ${loc(next.title)}`,
-                h("span", { "aria-hidden": "true", text: isRTL() ? "←" : "→" })
-              )
-          )
-        ),
+        { class: "gallery" },
+        images.slice(PREVIEW).map((image, j) => {
+          const index = PREVIEW + j;
+          return h(
+            "button",
+            { type: "button", class: "gallery-item reveal", style: `--r:${ratio(image).toFixed(4)}`, onclick: () => openLightbox(project, index) },
+            picture(image, alt(index), "(min-width: 900px) 25vw, 50vw")
+          );
+        })
+      );
+
+    const meta = [loc(project.category), loc(project.location), project.year, t("imagesCount", { n: total })].filter(Boolean);
+    const description = loc(project.description);
+
+    return h(
+      "article",
+      { class: "project reveal", id: anchor(project), "aria-labelledby": `${anchor(project)}-title` },
+      h(
+        "header",
+        { class: "project-info" },
         h(
           "div",
-          { class: "project-media" },
-          gallery,
-          total > PREVIEW_COUNT &&
-            h("button", {
-              class: "show-more",
-              type: "button",
-              "aria-expanded": String(expanded),
-              text: expanded ? t("showLess") : t("showAll", { n: total }),
-              onclick: () => toggleExpanded(project, index),
-            })
+          { class: "project-sticky" },
+          h("span", { class: "num", text: pad(number) }),
+          h("h3", { class: "project-title", id: `${anchor(project)}-title`, tabindex: "-1", text: title }),
+          h("p", { class: "project-meta", text: meta.join(" · ") }),
+          description && h("p", { class: "project-desc", text: description })
         )
+      ),
+      h(
+        "div",
+        { class: "project-media" },
+        h("div", { class: `mosaic mosaic-${preview.length}` }, tiles),
+        rest,
+        rest &&
+          h("button", {
+            type: "button",
+            class: "pill show-less",
+            "aria-expanded": "true",
+            text: t("showLess"),
+            onclick: () => toggleExpanded(project),
+          })
       )
     );
   }
 
-  function toggleExpanded(project, index) {
+  function toggleExpanded(project) {
     const wasExpanded = state.expanded.has(project.id);
     if (wasExpanded) state.expanded.delete(project.id);
     else state.expanded.add(project.id);
 
-    const fresh = renderProject(project, index);
+    const fresh = renderProject(project);
+    fresh.classList.add("is-in");
     document.getElementById(anchor(project)).replaceWith(fresh);
-    fresh.querySelectorAll(".reveal").forEach((node) => node.classList.add("is-in"));
-    const button = fresh.querySelector(".show-more");
-    button.focus({ preventScroll: true });
-    if (wasExpanded) button.scrollIntoView({ block: "center" });
+    revealOnScroll(true);
+
+    if (wasExpanded) {
+      fresh.scrollIntoView({ block: "start" });
+      fresh.querySelector(".is-plus").focus({ preventScroll: true });
+    } else {
+      // The third image is now a normal tile; continue from the first newly shown image.
+      fresh.querySelector(".gallery-item").focus({ preventScroll: true });
+    }
   }
+
+  /* ---------- about & contact ---------- */
 
   function renderAbout(site) {
     const about = loc(site.about);
@@ -389,14 +505,14 @@
 
   /* ---------- scroll effects ---------- */
 
-  let observer;
-  function revealOnScroll() {
+  let observer = null;
+  function revealOnScroll(animate) {
     const nodes = document.querySelectorAll(".reveal:not(.is-in)");
-    // After a language switch, show everything at once instead of animating it again.
-    if (state.rendered || !("IntersectionObserver" in window)) {
+    if (!animate || !("IntersectionObserver" in window)) {
       nodes.forEach((node) => node.classList.add("is-in"));
       return;
     }
+    if (observer) observer.disconnect();
     observer = new IntersectionObserver(
       (entries) => {
         for (const entry of entries) {
@@ -405,7 +521,7 @@
           observer.unobserve(entry.target);
         }
       },
-      { rootMargin: "0px 0px -8% 0px" }
+      { rootMargin: "0px 0px -6% 0px" }
     );
     nodes.forEach((node) => observer.observe(node));
   }
@@ -522,9 +638,19 @@
 
   render();
 
-  // Sections are created by this script, so jump to a shared #project link once they exist.
-  if (location.hash) {
-    const target = document.getElementById(decodeURIComponent(location.hash.slice(1)));
+  // Sections are created by this script, so jump to a shared link (#project-…, #contact…) once they exist.
+  if (DATA && location.hash) {
+    const id = decodeURIComponent(location.hash.slice(1));
+    const project = DATA.projects.find((p) => anchor(p) === id);
+    if (project) {
+      if (!filtered().includes(project)) clearFilters();
+      const position = filtered().indexOf(project);
+      if (position >= state.visible) {
+        state.visible = Math.ceil((position + 1) / PAGE_SIZE) * PAGE_SIZE;
+        renderProjects(false);
+      }
+    }
+    const target = document.getElementById(id);
     if (target) target.scrollIntoView();
   }
 })();
