@@ -453,15 +453,33 @@ h1, h2, h3 { margin: 0; font-family: var(--display); font-weight: 500; }
 .contact-list { margin: 0; padding: 0; list-style: none; }
 .contact-list a {
   display: grid;
-  grid-template-columns: minmax(96px, 160px) 1fr auto;
-  align-items: baseline;
+  grid-template-columns: minmax(150px, 200px) 1fr auto;
+  align-items: center;
   gap: 16px;
-  padding: 18px 0;
+  padding: 16px 0;
   border-bottom: 1px solid var(--line);
   text-decoration: none;
 }
 .contact-list li:first-child a { border-top: 1px solid var(--line); }
-.contact-label { font-size: 0.85rem; color: var(--muted); }
+.contact-label { display: flex; align-items: center; gap: 12px; font-size: 0.85rem; color: var(--muted); }
+.contact-icon {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 40px;
+  height: 40px;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  color: var(--ink);
+  transition: background 0.2s, border-color 0.2s, color 0.2s;
+}
+.contact-icon svg { width: 19px; height: 19px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+.contact-list a:hover .contact-icon { background: var(--accent); border-color: var(--accent); color: #fff; }
+/* On phones the icon alone labels the row; the name stays for screen readers. */
+@media (max-width: 560px) {
+  .contact-list a { grid-template-columns: auto 1fr auto; }
+  .contact-name { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+}
 .contact-value { font-family: var(--latin); font-size: clamp(1.05rem, 2vw, 1.35rem); font-weight: 500; overflow-wrap: anywhere; text-align: start; }
 .contact-arrow { color: var(--muted); transition: transform 0.2s, color 0.2s; }
 .contact-list a:hover .contact-arrow { color: var(--accent); transform: translate(3px, -3px); }
