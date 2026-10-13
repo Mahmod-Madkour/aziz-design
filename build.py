@@ -170,6 +170,7 @@ def process_image(src, dest_dir):
 def load_site():
     raw = read_json(ROOT / "site.json", required=True)
     site = {"name": str(raw.get("name") or "AZIZ DESIGN").strip()}
+    site["copyright"] = str(raw.get("copyright") or "").strip() or site["name"]
     for key in ("role", "headline", "intro", "about", "location"):
         site[key] = localized(raw.get(key))
     site["services"] = [s for s in map(localized, raw.get("services") or []) if s]

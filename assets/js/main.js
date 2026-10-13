@@ -40,9 +40,11 @@
       "contact.email": "Email",
       "contact.phone": "Phone",
       "contact.whatsapp": "WhatsApp",
+      "contact.facebook": "Facebook",
       "contact.instagram": "Instagram",
       "contact.linkedin": "LinkedIn",
       "contact.behance": "Behance",
+      "contact.address": "Address",
       "footer.rights": "All rights reserved.",
       "footer.top": "Back to top",
       "lb.label": "Image viewer",
@@ -84,9 +86,11 @@
       "contact.email": "البريد الإلكتروني",
       "contact.phone": "الهاتف",
       "contact.whatsapp": "واتساب",
+      "contact.facebook": "فيسبوك",
       "contact.instagram": "إنستغرام",
       "contact.linkedin": "لينكدإن",
       "contact.behance": "بيهانس",
+      "contact.address": "العنوان",
       "footer.rights": "جميع الحقوق محفوظة.",
       "footer.top": "العودة للأعلى",
       "lb.label": "عارض الصور",
@@ -208,7 +212,7 @@
     renderProjects(!state.rendered);
     renderAbout(site);
     renderContact(site);
-    $("#footer-copy").textContent = `© ${new Date().getFullYear()} ${site.name}. ${t("footer.rights")}`;
+    $("#footer-copy").textContent = `© ${new Date().getFullYear()} ${site.copyright || site.name}. ${t("footer.rights")}`;
     setupLightboxLabels();
     state.rendered = true;
   }
@@ -479,10 +483,14 @@
       ["email", c.email, (v) => `mailto:${v}`],
       ["phone", c.phone, (v) => `tel:${v.replace(/[^\d+]/g, "")}`],
       ["whatsapp", c.whatsapp, (v) => `https://wa.me/${v.replace(/\D/g, "")}`],
+      ["facebook", c.facebook, (v) => web(v, "https://www.facebook.com/")],
       ["instagram", c.instagram, (v) => web(v, "https://instagram.com/")],
       ["linkedin", c.linkedin, (v) => web(v, "https://www.linkedin.com/in/")],
       ["behance", c.behance, (v) => web(v, "https://www.behance.net/")],
+      ["address", c.address, (v) => `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(v)}`],
     ].filter(([, value]) => value);
+    // A full link reads better as the studio's name than as a long URL.
+    const shown = (value) => (/^https?:\/\//i.test(value) ? site.name : value);
 
     $("#contact").hidden = rows.length === 0;
     $("#contact-list").replaceChildren(
@@ -495,7 +503,7 @@
             "a",
             { href: link(value), target: external ? "_blank" : null, rel: external ? "noopener" : null },
             h("span", { class: "contact-label", text: t(`contact.${key}`) }),
-            h("span", { class: "contact-value", dir: "ltr", text: value }),
+            h("span", { class: "contact-value", dir: "ltr", text: shown(value) }),
             h("span", { class: "contact-arrow", "aria-hidden": "true", text: "↗" })
           )
         );

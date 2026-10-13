@@ -1,5 +1,6 @@
 {
   "name": "AZIZ DESIGN",
+  "copyright": "Mahmoud Madkour",
   "role": { "en": "Design Engineer", "ar": "مهندس تصميم" },
   "headline": {
     "en": "Designing spaces where *form* meets *function*.",
@@ -9,7 +10,7 @@
     "en": "A selection of design and engineering projects — from the first concept to the finished detail.",
     "ar": "مجموعة مختارة من مشاريع التصميم والهندسة — من الفكرة الأولى حتى أدق التفاصيل."
   },
-  "location": { "en": "", "ar": "" },
+  "location": { "en": "Heliopolis, Egypt", "ar": "مصر الجديدة، مصر" },
   "about": {
     "en": "AZIZ DESIGN is the portfolio of a design engineer who believes good design should be both beautiful and buildable.\n\nEvery project starts by listening — to the client, the site and the way the space will be used — and ends with drawings and details that hold up in reality.",
     "ar": "AZIZ DESIGN هو معرض أعمال مهندس تصميم يؤمن بأن التصميم الجيد يجب أن يكون جميلاً وقابلاً للتنفيذ في آنٍ واحد.\n\nيبدأ كل مشروع بالإصغاء — للعميل وللموقع ولطريقة استخدام المساحة — وينتهي برسومات وتفاصيل تصمد على أرض الواقع."
@@ -21,11 +22,13 @@
     { "en": "Technical Drawings", "ar": "الرسومات التنفيذية" }
   ],
   "contact": {
-    "email": "your.email@example.com",
-    "phone": "",
-    "whatsapp": "+20 100 000 0000",
+    "email": "aabdelaziz678@gmail.com",
+    "phone": "01044411134",
+    "whatsapp": "+201044411134",
+    "facebook": "https://www.facebook.com/profile.php?id=100063769666530",
     "instagram": "",
     "linkedin": "",
-    "behance": ""
+    "behance": "",
+    "address": "77 Abdelhamid Badawi Street, in front of Al Salam Hotel, Heliopolis, Egypt"
   }
 }

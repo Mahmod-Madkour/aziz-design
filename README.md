@@ -56,8 +56,9 @@ and GitHub refuses files over 100 MB.
 ## Edit the site text and contact details
 
 Everything outside the projects (headline, about text, services, email,
-WhatsApp, Instagram…) is in `site.json`. Leave a contact field empty (`""`)
+WhatsApp, Facebook, address…) is in `site.json`. Leave a contact field empty (`""`)
 to hide it. Put `*stars*` around a word in the headline to highlight it.
+`copyright` is the name shown in the footer's © line (the site name if empty).
 
 ## Preview on your computer
 
